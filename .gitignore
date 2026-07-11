@@ -1,0 +1,17 @@
+# Compiled Java files
+*.class
+
+# Uploads directory (user data, not needed in repo)
+uploads/
+
+# Playlist data (user data)
+playlists.dat
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+*.iml
+.vscode/
