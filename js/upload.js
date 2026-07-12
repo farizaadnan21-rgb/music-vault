@@ -241,29 +241,27 @@ const Upload = (() => {
     fileEntry.progress = 0;
     updateUploadUI();
 
-    Logger.append(`Uploading "${fileEntry.name}" via client direct...`, '');
+    Logger.append(`Uploading "${fileEntry.name}" ke server...`, '');
 
-    const payload = JSON.stringify({ 
-      nodeId: window.AppConfig.NODE_ID,
-      size: fileEntry.size 
-    });
+    const uniqueFilename = `${window.AppConfig.NODE_ID}_${fileEntry.name}`;
 
     try {
-      if (!window.vercelBlob) {
-         throw new Error("Vercel Blob client script not loaded");
-      }
-      
-      const uniqueFilename = `${window.AppConfig.NODE_ID}_${fileEntry.name}`;
-      const newBlob = await window.vercelBlob.upload(uniqueFilename, fileEntry.file, {
-        access: 'public',
-        handleUploadUrl: `${window.AppConfig.BACKEND_URL}/upload`,
-        clientPayload: payload,
-        onUploadProgress: (e) => {
-           fileEntry.progress = Math.round((e.loaded / e.total) * 100);
-           updateUploadUI();
-        }
+      const response = await fetch(`${window.AppConfig.BACKEND_URL}/upload`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': fileEntry.file.type || 'audio/mpeg',
+          'X-Filename': uniqueFilename,
+          'X-Node-Id': window.AppConfig.NODE_ID,
+        },
+        body: fileEntry.file,
       });
-      
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || `Server error ${response.status}`);
+      }
+
       fileEntry.status = 'complete';
       fileEntry.progress = 100;
       Logger.append(`Upload selesai: "${fileEntry.name}" tersimpan di Vercel Blob.`, 'success');

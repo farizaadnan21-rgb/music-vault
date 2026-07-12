@@ -1,5 +1,4 @@
 const { put, del, head, list } = require('@vercel/blob');
-const { handleUpload } = require('@vercel/blob/client');
 
 // --- IN-MEMORY STORE ---
 const fileIndex = new Map();
@@ -33,7 +32,14 @@ function cleanInactivePeers() {
 // --- EXPRESS APP SETUP ---
 const express = require('express');
 const app = express();
-app.use(express.json());
+
+// JSON body parser — skip for /api/upload so the raw stream is preserved for Vercel Blob put()
+app.use((req, res, next) => {
+  if (req.url === '/api/upload' || req.url === '/upload') {
+    return next();
+  }
+  express.json()(req, res, next);
+});
 
 // CORS
 app.use((req, res, next) => {
@@ -125,39 +131,32 @@ app.delete('/api/delete_file', async (req, res) => {
   const ownerId = filename.split('_')[0];
   if (ownerId !== nodeId && ownerId !== 'Unknown') return res.status(403).json({ error: 'Access denied' });
   
-  if (process.env.BLOB_READ_WRITE_TOKEN) {
-    try { 
-      await del(url); 
-      res.json({ success: true, message: `Deleted ${filename}` });
-    } catch (e) { 
-      log('WARN', e.message); 
-      res.status(500).json({ error: e.message });
-    }
-  } else {
-    res.status(500).json({ error: 'BLOB_READ_WRITE_TOKEN missing' });
+  try { 
+    await del(url); 
+    res.json({ success: true, message: `Deleted ${filename}` });
+  } catch (e) { 
+    log('WARN', e.message); 
+    res.status(500).json({ error: e.message });
   }
 });
 
-// Vercel Blob token generator endpoint
+// Server-side upload endpoint using put() — works with OIDC (no BLOB_READ_WRITE_TOKEN needed)
 app.post('/api/upload', async (req, res) => {
   try {
-    const jsonResponse = await handleUpload({
-      body: req.body,
-      request: req,
-      onBeforeGenerateToken: async (pathname, clientPayload) => {
-        return {
-          allowedContentTypes: ['audio/mpeg', 'audio/wav', 'audio/ogg', 'audio/flac', 'audio/aac', 'audio/mp4', 'audio/webm'],
-          tokenPayload: clientPayload,
-        };
-      },
-      onUploadCompleted: async ({ blob, tokenPayload }) => {
-        // We don't need to save to in-memory index anymore
-        log('INFO', `Upload completed: ${blob.pathname}`);
-      }
+    const filename = req.headers['x-filename'];
+    const contentType = req.headers['content-type'] || 'audio/mpeg';
+    if (!filename) return res.status(400).json({ error: 'X-Filename header required' });
+
+    const blob = await put(filename, req, {
+      access: 'public',
+      contentType,
     });
-    res.json(jsonResponse);
+
+    log('INFO', `Upload completed: ${blob.pathname}`);
+    res.json({ success: true, url: blob.url, pathname: blob.pathname });
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    log('ERROR', `Upload failed: ${err.message}`);
+    res.status(500).json({ error: err.message });
   }
 });
 
