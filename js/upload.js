@@ -91,67 +91,56 @@ const Upload = (() => {
    * Node-ID di browser cocok dengan pemilik file tersebut (f.uploadedBy).
    */
   function renderLibrary(files) {
-    if (libraryCount) {
-      libraryCount.textContent = files.length + ' File' + (files.length !== 1 ? 's' : '');
-    }
-
-    if (files.length === 0) {
-      libraryEmpty.style.display = 'block';
-      // Clear any existing items but keep empty state
-      const items = libraryList.querySelectorAll('.library-item');
-      items.forEach(i => i.remove());
-      return;
-    }
-
-    libraryEmpty.style.display = 'none';
-
-    // Build library HTML
-    let html = '';
-    files.forEach(f => {
-      const sizeStr = (f.size / (1024 * 1024)).toFixed(2) + ' MB';
-      const d = new Date(f.modified);
-      const dateStr = d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-
-      // Owner tags
-      let ownersHtml = '';
-      if (f.owners && f.owners.length > 0) {
-        ownersHtml = f.owners.slice(0, 3).map(o => `<span class="library-node-badge">${Logger.escapeHTML(o)}</span>`).join('');
-        if (f.owners.length > 3) ownersHtml += `<span class="library-node-badge">+${f.owners.length - 3}</span>`;
+      if (libraryCount) {
+        libraryCount.textContent = files.length + ' File' + (files.length !== 1 ? 's' : '');
       }
 
-      const escapedName = Logger.escapeHTML(f.name);
-      const isOwner = f.uploadedBy === window.AppConfig.NODE_ID;
+      if (files.length === 0) {
+        libraryEmpty.style.display = 'block';
+        const items = libraryList.querySelectorAll('.library-item');
+        items.forEach(i => i.remove());
+        return;
+      }
 
-      html += `
-        <div class="library-item">
-          <div class="library-item-icon">🎵</div>
-          <div class="library-item-info">
-            <div class="library-item-name" title="${escapedName}">${escapedName}</div>
-            <div class="library-item-meta">
-              <span>${sizeStr}</span>
-              <span>•</span>
-              <span>${dateStr}</span>
+      libraryEmpty.style.display = 'none';
+
+      let html = '';
+      files.forEach(f => {
+        const sizeStr = (f.size / (1024 * 1024)).toFixed(2) + ' MB';
+        const d = new Date(f.uploadedAt || Date.now());
+        const dateStr = d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+
+        const escapedName = Logger.escapeHTML(f.filename);
+        const isOwner = f.owner === window.AppConfig.NODE_ID;
+
+        html += `
+          <div class="library-item">
+            <div class="library-item-icon">🎵</div>
+            <div class="library-item-info">
+              <div class="library-item-name" title="${escapedName}">${escapedName}</div>
+              <div class="library-item-meta">
+                <span>${sizeStr}</span>
+                <span>•</span>
+                <span>${dateStr}</span>
+              </div>
             </div>
-            ${ownersHtml ? `<div class="library-item-owners">${ownersHtml}</div>` : ''}
+            <div class="library-item-actions">
+              <button class="neo-btn-play-sm" onclick="Player.play('${escapedName}', '${Logger.escapeHTML(f.blobUrl || '')}')">
+                ▶ Play
+              </button>
+              ${isOwner ? `
+              <button class="neo-btn-danger-sm" onclick="Upload.deleteServerFile('${escapedName}')" title="Hapus File">
+                🗑️
+              </button>` : ''}
+            </div>
           </div>
-          <div class="library-item-actions">
-            <button class="neo-btn-play-sm" onclick="Player.play('${escapedName}', 'Server')">
-              ▶ Play
-            </button>
-            ${isOwner ? `
-            <button class="neo-btn-danger-sm" onclick="Upload.deleteServerFile('${escapedName}')" title="Hapus File">
-              🗑️
-            </button>` : ''}
-          </div>
-        </div>
-      `;
-    });
+        `;
+      });
 
-    // Replace content (keep empty state element)
-    const items = libraryList.querySelectorAll('.library-item');
-    items.forEach(i => i.remove());
-    libraryList.insertAdjacentHTML('beforeend', html);
-  }
+      const items = libraryList.querySelectorAll('.library-item');
+      items.forEach(i => i.remove());
+      libraryList.insertAdjacentHTML('beforeend', html);
+    }
 
   /**
    * Menghapus lagu dari Server. Mengirim HTTP DELETE dan 
@@ -254,9 +243,6 @@ const Upload = (() => {
 
     Logger.append(`Uploading "${fileEntry.name}" ke server...`, '');
 
-    const formData = new FormData();
-    formData.append('file', fileEntry.file);
-
     const xhr = new XMLHttpRequest();
 
     xhr.upload.addEventListener('progress', (e) => {
@@ -271,11 +257,15 @@ const Upload = (() => {
         fileEntry.status = 'complete';
         fileEntry.progress = 100;
         Logger.append(`Upload selesai: "${fileEntry.name}" tersimpan di server.`, 'success');
-        // Refresh library to show new file
         setTimeout(fetchLibrary, 500);
       } else {
         fileEntry.status = 'error';
-        Logger.append(`Gagal upload "${fileEntry.name}": HTTP ${xhr.status}`, 'error');
+        try {
+          const err = JSON.parse(xhr.responseText);
+          Logger.append(`Gagal upload "${fileEntry.name}": ${err.error || err.details || 'HTTP ' + xhr.status}`, 'error');
+        } catch (_) {
+          Logger.append(`Gagal upload "${fileEntry.name}": HTTP ${xhr.status}`, 'error');
+        }
       }
       checkAllDone();
       updateUploadUI();
@@ -289,8 +279,10 @@ const Upload = (() => {
     });
 
     xhr.open('POST', `${window.AppConfig.BACKEND_URL}/upload`);
+    xhr.setRequestHeader('Content-Type', fileEntry.file.type || 'audio/mpeg');
+    xhr.setRequestHeader('X-Filename', encodeURIComponent(fileEntry.name));
     xhr.setRequestHeader('X-Node-Id', window.AppConfig.NODE_ID);
-    xhr.send(formData);
+    xhr.send(fileEntry.file);
   }
 
   function checkAllDone() {

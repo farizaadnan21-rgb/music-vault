@@ -74,7 +74,11 @@ const Logger = (() => {
     if (logBody) logBody.innerHTML = '';
   };
 
-  return { init, info, warn, error, success, clear, log };
+  return { init, info, warn, error, success, clear, log, append: log, escapeHTML: (s) => {
+    const d = document.createElement('div');
+    d.textContent = s;
+    return d.innerHTML;
+  }};
 })();
 
 // Network Stats Module
@@ -245,8 +249,8 @@ const AudioPlayer = (() => {
     document.getElementById('track-source').textContent = 'Streaming...';
     document.getElementById('bar-track-node').textContent = 'Loading...';
 
-    // Set audio source
-    if (blobUrl) {
+    // Set audio source — use blobUrl direct if it's a full URL, else go through API
+    if (blobUrl && blobUrl.startsWith('http')) {
       audioElement.src = blobUrl;
     } else {
       audioElement.src = `${window.AppConfig.BACKEND_URL}/music/${encodeURIComponent(filename)}`;
@@ -286,3 +290,6 @@ document.addEventListener('DOMContentLoaded', () => {
   Logger.info('Music Vault initialized');
   Logger.info(`Node ID: ${window.AppConfig.NODE_ID}`);
 });
+
+// Global alias — frontend code calls Player.play()
+const Player = AudioPlayer;

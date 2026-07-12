@@ -2,17 +2,13 @@
 const { put } = require('@vercel/blob');
 const { fileIndex, log, updatePeerActivity } = require('./_store');
 
-// Disable body parsing for file uploads
-export const config = {
-  api: {
-    bodyParser: false,
-  },
-};
-
+// Vercel: disable body parsing so we get raw stream for Blob upload
 module.exports = async (req, res) => {
-  // Handle CORS preflight
   if (req.method === 'OPTIONS') {
-    return res.status(200).json({});
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Methods', 'POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Node-Id, X-Filename');
+    return res.status(200).end();
   }
 
   if (req.method !== 'POST') {
@@ -25,21 +21,15 @@ module.exports = async (req, res) => {
     const fileSize = parseInt(req.headers['content-length'] || '0', 10);
 
     updatePeerActivity(nodeId);
-
     log('INFO', `Upload started: ${filename} by ${nodeId}, size: ${fileSize}`);
 
-    // Check if running locally (no BLOB_READ_WRITE_TOKEN)
     const isLocal = !process.env.BLOB_READ_WRITE_TOKEN;
-
     let blobUrl = null;
 
     if (isLocal) {
-      // Local development - store in memory only
-      // In production with Vercel Blob, files persist in cloud
       blobUrl = `/api/music/${encodeURIComponent(filename)}`;
       log('INFO', `Local mode: file stored in memory`);
     } else {
-      // Production - use Vercel Blob
       const blob = await put(filename, req, {
         access: 'public',
         addRandomSuffix: false,
@@ -48,16 +38,16 @@ module.exports = async (req, res) => {
       log('INFO', `File uploaded to Blob: ${blobUrl}`);
     }
 
-    // Store file metadata in index
     fileIndex.set(filename, {
       ownerId: nodeId,
       size: fileSize,
-      blobUrl: blobUrl,
+      blobUrl,
       uploadedAt: new Date().toISOString()
     });
 
     log('INFO', `Upload complete: ${filename} by ${nodeId}`);
 
+    res.setHeader('Access-Control-Allow-Origin', '*');
     return res.status(200).json({
       success: true,
       message: `File ${filename} uploaded successfully`,
@@ -70,4 +60,9 @@ module.exports = async (req, res) => {
     log('ERROR', `Upload error: ${error.message}`);
     return res.status(500).json({ error: 'Internal server error', details: error.message });
   }
+};
+
+// Vercel config — disable body parsing for raw stream
+module.exports.config = {
+  api: { bodyParser: false }
 };

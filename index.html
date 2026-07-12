@@ -265,6 +265,13 @@
   <script src="js/search.js"></script>
   <script src="js/upload.js"></script>
   <script src="js/playlist.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      Search.init();
+      Upload.init();
+      Playlist.init();
+    });
+  </script>
 
 </body>
 </html>
