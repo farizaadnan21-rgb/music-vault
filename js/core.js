@@ -182,7 +182,10 @@ const AudioVisualizer = (() => {
 
 // Heartbeat Module - Keep connection alive
 const Heartbeat = (() => {
+  let lastLatency = 0;
+
   const init = () => {
+    sendHeartbeat();
     setInterval(sendHeartbeat, 10000); // Every 10 seconds
   };
 
@@ -195,13 +198,9 @@ const Heartbeat = (() => {
           'Content-Type': 'application/json',
           'X-Node-Id': window.AppConfig.NODE_ID
         },
-        body: JSON.stringify({ latency: 0 })
+        body: JSON.stringify({ latency: lastLatency })
       });
-      const latency = Date.now() - start;
-      
-      // Update latency display
-      const latencyEl = document.getElementById('stat-latency');
-      if (latencyEl) latencyEl.textContent = latency + 'ms';
+      lastLatency = Date.now() - start;
     } catch (err) {
       Logger.warn('Heartbeat gagal: ' + err.message);
     }
