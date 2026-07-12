@@ -15,7 +15,7 @@ const Upload = (() => {
   // Accepted formats
   const ACCEPTED_TYPES = ['audio/mpeg', 'audio/wav', 'audio/ogg', 'audio/flac', 'audio/aac', 'audio/mp4', 'audio/webm'];
   const ACCEPTED_EXTENSIONS = ['.mp3', '.wav', '.ogg', '.flac', '.aac', '.m4a', '.weba'];
-  const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100 MB
+  const MAX_FILE_SIZE = 4.5 * 1024 * 1024; // 4.5 MB (Vercel Serverless limit)
 
   function init() {
     uploadInput     = document.getElementById('upload-input');
@@ -178,7 +178,7 @@ const Upload = (() => {
         continue;
       }
       if (file.size > MAX_FILE_SIZE) {
-        Logger.append(`Gagal: "${file.name}" melebihi batas 100MB.`, 'error');
+        Logger.append(`Gagal: "${file.name}" melebihi batas 4.5MB (Limit Vercel).`, 'error');
         continue;
       }
       if (uploadedFiles.some(f => f.name === file.name && f.size === file.size)) {
@@ -222,7 +222,7 @@ const Upload = (() => {
     updateUploadUI();
   }
 
-  function uploadAll() {
+  async function uploadAll() {
     const pending = uploadedFiles.filter(f => f.status === 'pending');
     if (pending.length === 0) {
       Logger.append('Tidak ada file baru untuk diupload.', 'warning');
@@ -232,9 +232,9 @@ const Upload = (() => {
     Logger.append(`Memulai upload ${pending.length} file ke server...`, 'info');
     uploadBtn.disabled = true;
 
-    pending.forEach((fileEntry, idx) => {
-      setTimeout(() => realUpload(fileEntry), idx * 500);
-    });
+    for (const fileEntry of pending) {
+      await realUpload(fileEntry);
+    }
   }
 
   async function realUpload(fileEntry) {
