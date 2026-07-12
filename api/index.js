@@ -1,4 +1,4 @@
-const { put, del, head, list } = require('@vercel/blob');
+const { put, del, head, list, getDownloadUrl } = require('@vercel/blob');
 
 // --- IN-MEMORY STORE ---
 const fileIndex = new Map();
@@ -78,18 +78,21 @@ app.get('/api/list_files', async (req, res) => {
   updatePeerActivity(req.headers['x-node-id'] || 'Unknown');
   try {
     const { blobs } = await list();
-    const files = blobs.map(b => {
+    const files = await Promise.all(blobs.map(async b => {
       // Parse Node-ID from filename: "Node-45_song.mp3"
       const parts = b.pathname.split('_');
       const ownerId = parts.length > 1 ? parts[0] : 'Unknown';
+      // Generate a signed download URL for private blobs
+      let downloadUrl = b.url;
+      try { downloadUrl = await getDownloadUrl(b.url); } catch(e) {}
       return { 
         filename: b.pathname, 
         ownerId, 
         size: b.size, 
-        blobUrl: b.url, 
+        blobUrl: downloadUrl, 
         uploadedAt: b.uploadedAt 
       };
-    });
+    }));
     res.json({ success: true, files, total: files.length });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -107,11 +110,13 @@ app.get('/api/search', async (req, res) => {
       if (!q || b.pathname.toLowerCase().includes(q)) {
         const parts = b.pathname.split('_');
         const ownerId = parts.length > 1 ? parts[0] : 'Unknown';
+        let downloadUrl = b.url;
+        try { downloadUrl = await getDownloadUrl(b.url); } catch(e) {}
         results.push({ 
           filename: b.pathname, 
           ownerId, 
           size: b.size, 
-          blobUrl: b.url, 
+          blobUrl: downloadUrl, 
           uploadedAt: b.uploadedAt 
         });
       }
@@ -148,7 +153,7 @@ app.post('/api/upload', async (req, res) => {
     if (!filename) return res.status(400).json({ error: 'X-Filename header required' });
 
     const blob = await put(filename, req, {
-      access: 'public',
+      access: 'private',
       contentType,
     });
 
@@ -160,13 +165,14 @@ app.post('/api/upload', async (req, res) => {
   }
 });
 
-// Stream direct redirect
+// Stream direct redirect (with signed URL for private store)
 app.get('/api/music/:filename', async (req, res) => {
   try {
     const { blobs } = await list();
     const b = blobs.find(x => x.pathname === req.params.filename);
     if (!b) return res.status(404).json({ error: 'Not found' });
-    res.redirect(b.url);
+    const downloadUrl = await getDownloadUrl(b.url);
+    res.redirect(downloadUrl);
   } catch(e) {
     res.status(500).json({ error: e.message });
   }
