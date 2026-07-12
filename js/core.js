@@ -214,6 +214,7 @@ const Heartbeat = (() => {
 const AudioPlayer = (() => {
   let audioElement = null;
   let isPlaying = false;
+  let currentFilename = null;
 
   const init = () => {
     audioElement = document.getElementById('audio-player');
@@ -237,11 +238,36 @@ const AudioPlayer = (() => {
       updatePlayerStatus('Idle');
       spinVinyl(false);
     });
+
+    // Spacebar to play/pause
+    document.addEventListener('keydown', (e) => {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+      if (e.code === 'Space') {
+        e.preventDefault();
+        togglePlay();
+      }
+    });
+  };
+
+  const togglePlay = () => {
+    if (!audioElement || !currentFilename) return;
+    if (isPlaying) {
+      audioElement.pause();
+    } else {
+      audioElement.play();
+    }
   };
 
   const play = async (filename, blobUrl) => {
     if (!audioElement) init();
     if (!audioElement) return;
+
+    if (currentFilename === filename) {
+      togglePlay();
+      return;
+    }
+
+    currentFilename = filename;
 
     // Extract original name for UI (remove Node-ID_)
     const displayFilename = filename.includes('_') ? filename.split('_').slice(1).join('_') : filename;
