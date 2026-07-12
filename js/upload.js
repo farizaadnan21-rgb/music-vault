@@ -129,7 +129,7 @@ const Upload = (() => {
                 ▶ Play
               </button>
               ${isOwner ? `
-              <button class="neo-btn-danger-sm" onclick="Upload.deleteServerFile('${escapedName}')" title="Hapus File">
+              <button class="neo-btn-danger-sm" onclick="Upload.deleteServerFile('${escapedName}', '${f.blobUrl}')" title="Hapus File">
                 🗑️
               </button>` : ''}
             </div>
@@ -146,10 +146,10 @@ const Upload = (() => {
    * Menghapus lagu dari Server. Mengirim HTTP DELETE dan 
    * Header X-Node-Id agar server dapat memverifikasi kepemilikan file.
    */
-  async function deleteServerFile(filename) {
+  async function deleteServerFile(filename, blobUrl) {
     if (!confirm(`Yakin ingin menghapus file "${filename}" dari server?`)) return;
     try {
-      const res = await fetch(`${window.AppConfig.BACKEND_URL}/delete_file?filename=${encodeURIComponent(filename)}`, {
+      const res = await fetch(`${window.AppConfig.BACKEND_URL}/delete_file?filename=${encodeURIComponent(filename)}&url=${encodeURIComponent(blobUrl)}`, {
         method: 'DELETE',
         headers: {
           'X-Node-Id': window.AppConfig.NODE_ID
@@ -253,7 +253,8 @@ const Upload = (() => {
          throw new Error("Vercel Blob client script not loaded");
       }
       
-      const newBlob = await window.vercelBlob.upload(fileEntry.name, fileEntry.file, {
+      const uniqueFilename = `${window.AppConfig.NODE_ID}_${fileEntry.name}`;
+      const newBlob = await window.vercelBlob.upload(uniqueFilename, fileEntry.file, {
         access: 'public',
         handleUploadUrl: `${window.AppConfig.BACKEND_URL}/upload`,
         clientPayload: payload,

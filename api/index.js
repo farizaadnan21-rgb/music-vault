@@ -1,4 +1,4 @@
-const { put, del, head } = require('@vercel/blob');
+const { put, del, head, list } = require('@vercel/blob');
 const { handleUpload } = require('@vercel/blob/client');
 
 // --- IN-MEMORY STORE ---
@@ -46,13 +46,20 @@ app.use((req, res, next) => {
 
 // --- API ENDPOINTS ---
 
-app.get('/api/stats', (req, res) => {
+app.get('/api/stats', async (req, res) => {
   updatePeerActivity(req.headers['x-node-id'] || 'Unknown');
   cleanInactivePeers();
   let totalLatency = 0;
   for (const lat of peerLatency.values()) totalLatency += lat;
   const avgLatency = peerLatency.size > 0 ? Math.round(totalLatency / peerLatency.size) : 0;
-  res.json({ success: true, stats: { totalFiles: fileIndex.size, totalPeers: activePeers.size, avgLatency: `${avgLatency}ms`, activePeers: Array.from(activePeers.keys()) } });
+  
+  let totalFiles = 0;
+  try {
+    const { blobs } = await list();
+    totalFiles = blobs.length;
+  } catch (e) {}
+  
+  res.json({ success: true, stats: { totalFiles, totalPeers: activePeers.size, avgLatency: `${avgLatency}ms`, activePeers: Array.from(activePeers.keys()) } });
 });
 
 app.post('/api/heartbeat', (req, res) => {
@@ -61,37 +68,74 @@ app.post('/api/heartbeat', (req, res) => {
   res.json({ success: true, message: 'Heartbeat received', nodeId });
 });
 
-app.get('/api/list_files', (req, res) => {
+app.get('/api/list_files', async (req, res) => {
   updatePeerActivity(req.headers['x-node-id'] || 'Unknown');
-  const files = [];
-  for (const [filename, meta] of fileIndex) files.push({ filename, ...meta });
-  res.json({ success: true, files, total: files.length });
+  try {
+    const { blobs } = await list();
+    const files = blobs.map(b => {
+      // Parse Node-ID from filename: "Node-45_song.mp3"
+      const parts = b.pathname.split('_');
+      const ownerId = parts.length > 1 ? parts[0] : 'Unknown';
+      return { 
+        filename: b.pathname, 
+        ownerId, 
+        size: b.size, 
+        blobUrl: b.url, 
+        uploadedAt: b.uploadedAt 
+      };
+    });
+    res.json({ success: true, files, total: files.length });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
-app.get('/api/search', (req, res) => {
+app.get('/api/search', async (req, res) => {
   updatePeerActivity(req.headers['x-node-id'] || 'Unknown');
   const q = (req.query.q || '').toLowerCase().trim();
-  const results = [];
-  for (const [filename, meta] of fileIndex) {
-    if (!q || filename.toLowerCase().includes(q)) results.push({ filename, ...meta });
+  
+  try {
+    const { blobs } = await list();
+    const results = [];
+    for (const b of blobs) {
+      if (!q || b.pathname.toLowerCase().includes(q)) {
+        const parts = b.pathname.split('_');
+        const ownerId = parts.length > 1 ? parts[0] : 'Unknown';
+        results.push({ 
+          filename: b.pathname, 
+          ownerId, 
+          size: b.size, 
+          blobUrl: b.url, 
+          uploadedAt: b.uploadedAt 
+        });
+      }
+    }
+    res.json({ success: true, query: q, results, totalPeers: activePeers.size });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
   }
-  res.json({ success: true, query: q, results, totalPeers: activePeers.size });
 });
 
 app.delete('/api/delete_file', async (req, res) => {
   const nodeId = req.headers['x-node-id'] || 'Unknown';
   const filename = req.query.filename;
-  if (!filename) return res.status(400).json({ error: 'Filename required' });
+  const url = req.query.url;
+  if (!filename || !url) return res.status(400).json({ error: 'Filename and url required' });
   
-  const meta = fileIndex.get(filename);
-  if (!meta) return res.status(404).json({ error: 'File not found' });
-  if (meta.ownerId !== nodeId) return res.status(403).json({ error: 'Access denied' });
+  const ownerId = filename.split('_')[0];
+  if (ownerId !== nodeId && ownerId !== 'Unknown') return res.status(403).json({ error: 'Access denied' });
   
-  if (process.env.BLOB_READ_WRITE_TOKEN && meta.blobUrl) {
-    try { await del(meta.blobUrl); } catch (e) { log('WARN', e.message); }
+  if (process.env.BLOB_READ_WRITE_TOKEN) {
+    try { 
+      await del(url); 
+      res.json({ success: true, message: `Deleted ${filename}` });
+    } catch (e) { 
+      log('WARN', e.message); 
+      res.status(500).json({ error: e.message });
+    }
+  } else {
+    res.status(500).json({ error: 'BLOB_READ_WRITE_TOKEN missing' });
   }
-  fileIndex.delete(filename);
-  res.json({ success: true, message: `Deleted ${filename}` });
 });
 
 // Vercel Blob token generator endpoint
@@ -107,9 +151,8 @@ app.post('/api/upload', async (req, res) => {
         };
       },
       onUploadCompleted: async ({ blob, tokenPayload }) => {
-        let payload = {};
-        try { payload = JSON.parse(tokenPayload); } catch(e){}
-        fileIndex.set(blob.pathname, { ownerId: payload.nodeId || 'Unknown', size: payload.size || 0, blobUrl: blob.url, uploadedAt: new Date().toISOString() });
+        // We don't need to save to in-memory index anymore
+        log('INFO', `Upload completed: ${blob.pathname}`);
       }
     });
     res.json(jsonResponse);
@@ -119,10 +162,15 @@ app.post('/api/upload', async (req, res) => {
 });
 
 // Stream direct redirect
-app.get('/api/music/:filename', (req, res) => {
-  const meta = fileIndex.get(req.params.filename);
-  if (!meta || !meta.blobUrl) return res.status(404).json({ error: 'Not found' });
-  res.redirect(meta.blobUrl);
+app.get('/api/music/:filename', async (req, res) => {
+  try {
+    const { blobs } = await list();
+    const b = blobs.find(x => x.pathname === req.params.filename);
+    if (!b) return res.status(404).json({ error: 'Not found' });
+    res.redirect(b.url);
+  } catch(e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // Playlists
@@ -141,12 +189,20 @@ app.post('/api/playlist/create', (req, res) => {
   res.json({ success: true, playlist: pl });
 });
 
-app.get('/api/playlist/songs', (req, res) => {
+app.get('/api/playlist/songs', async (req, res) => {
   const pl = playlists.get(req.query.playlistId);
   if (!pl) return res.status(404).json({ error: 'Not found' });
+  
+  let blobsMap = new Map();
+  try {
+    const { blobs } = await list();
+    blobs.forEach(b => blobsMap.set(b.pathname, b));
+  } catch(e) {}
+  
   const songs = pl.songs.map(filename => {
-    const meta = fileIndex.get(filename);
-    return { filename, owner: meta?.ownerId || 'Unknown', size: meta?.size || 0, blobUrl: meta?.blobUrl || null };
+    const meta = blobsMap.get(filename);
+    const ownerId = filename.split('_')[0];
+    return { filename, owner: ownerId || 'Unknown', size: meta?.size || 0, blobUrl: meta?.url || null };
   });
   res.json({ success: true, playlist: { ...pl, songs } });
 });
@@ -154,7 +210,8 @@ app.get('/api/playlist/songs', (req, res) => {
 app.post('/api/playlist/add_song', (req, res) => {
   const { playlistId, filename } = req.body;
   const pl = playlists.get(playlistId);
-  if (!pl || !fileIndex.has(filename)) return res.status(404).json({ error: 'Not found' });
+  if (!pl) return res.status(404).json({ error: 'Not found' });
+  
   if (!pl.songs.includes(filename)) pl.songs.push(filename);
   res.json({ success: true, playlist: pl });
 });

@@ -261,7 +261,10 @@
   </div>
 
   <!-- Scripts (modular, order matters) -->
-  <script src="https://cdn.jsdelivr.net/npm/@vercel/blob@0.23.4/dist/client.min.js"></script>
+  <script type="module">
+    import { upload } from 'https://esm.sh/@vercel/blob@0.23.4/client';
+    window.vercelBlob = { upload };
+  </script>
   <script src="js/core.js"></script>
   <script src="js/search.js"></script>
   <script src="js/upload.js"></script>
