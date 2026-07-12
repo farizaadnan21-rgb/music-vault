@@ -1,13 +1,11 @@
-// Upload file endpoint with Vercel Blob storage
-const { put } = require('@vercel/blob');
-const { fileIndex, log, updatePeerActivity } = require('./_store');
+const { handleUpload } = require('@vercel/blob/client');
+const { fileIndex, log } = require('./_store');
 
-// Vercel: disable body parsing so we get raw stream for Blob upload
 module.exports = async (req, res) => {
   if (req.method === 'OPTIONS') {
     res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Methods', 'POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Node-Id, X-Filename');
+    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', '*');
     return res.status(200).end();
   }
 
@@ -16,53 +14,35 @@ module.exports = async (req, res) => {
   }
 
   try {
-    const nodeId = req.headers['x-node-id'] || 'Unknown';
-    const filename = req.headers['x-filename'] ? decodeURIComponent(req.headers['x-filename']) : `upload-${Date.now()}.mp3`;
-    const fileSize = parseInt(req.headers['content-length'] || '0', 10);
-
-    updatePeerActivity(nodeId);
-    log('INFO', `Upload started: ${filename} by ${nodeId}, size: ${fileSize}`);
-
-    const isLocal = !process.env.BLOB_READ_WRITE_TOKEN;
-    let blobUrl = null;
-
-    if (isLocal) {
-      blobUrl = `/api/music/${encodeURIComponent(filename)}`;
-      log('INFO', `Local mode: file stored in memory`);
-    } else {
-      const blob = await put(filename, req, {
-        access: 'public',
-        addRandomSuffix: false,
-      });
-      blobUrl = blob.url;
-      log('INFO', `File uploaded to Blob: ${blobUrl}`);
-    }
-
-    fileIndex.set(filename, {
-      ownerId: nodeId,
-      size: fileSize,
-      blobUrl,
-      uploadedAt: new Date().toISOString()
+    const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
+    
+    const jsonResponse = await handleUpload({
+      body,
+      request: req,
+      onBeforeGenerateToken: async (pathname, clientPayload) => {
+        return {
+          allowedContentTypes: ['audio/mpeg', 'audio/wav', 'audio/ogg', 'audio/flac', 'audio/aac', 'audio/mp4', 'audio/webm'],
+          tokenPayload: clientPayload,
+        };
+      },
+      onUploadCompleted: async ({ blob, tokenPayload }) => {
+        let payload = {};
+        try { payload = JSON.parse(tokenPayload); } catch(e){}
+        
+        fileIndex.set(blob.pathname, {
+          ownerId: payload.nodeId || 'Unknown',
+          size: payload.size || 0,
+          blobUrl: blob.url,
+          uploadedAt: new Date().toISOString()
+        });
+        log('INFO', `Client upload complete: ${blob.pathname}`);
+      }
     });
-
-    log('INFO', `Upload complete: ${filename} by ${nodeId}`);
 
     res.setHeader('Access-Control-Allow-Origin', '*');
-    return res.status(200).json({
-      success: true,
-      message: `File ${filename} uploaded successfully`,
-      filename,
-      owner: nodeId,
-      blobUrl,
-      size: fileSize
-    });
+    return res.status(200).json(jsonResponse);
   } catch (error) {
-    log('ERROR', `Upload error: ${error.message}`);
-    return res.status(500).json({ error: 'Internal server error', details: error.message });
+    log('ERROR', `Upload token error: ${error.message}`);
+    return res.status(400).json({ error: error.message });
   }
-};
-
-// Vercel config — disable body parsing for raw stream
-module.exports.config = {
-  api: { bodyParser: false }
 };

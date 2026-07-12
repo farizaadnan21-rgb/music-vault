@@ -236,53 +236,44 @@ const Upload = (() => {
     });
   }
 
-  function realUpload(fileEntry) {
+  async function realUpload(fileEntry) {
     fileEntry.status = 'uploading';
     fileEntry.progress = 0;
     updateUploadUI();
 
-    Logger.append(`Uploading "${fileEntry.name}" ke server...`, '');
+    Logger.append(`Uploading "${fileEntry.name}" via client direct...`, '');
 
-    const xhr = new XMLHttpRequest();
-
-    xhr.upload.addEventListener('progress', (e) => {
-      if (e.lengthComputable) {
-        fileEntry.progress = Math.round((e.loaded / e.total) * 100);
-        updateUploadUI();
-      }
+    const payload = JSON.stringify({ 
+      nodeId: window.AppConfig.NODE_ID,
+      size: fileEntry.size 
     });
 
-    xhr.addEventListener('load', () => {
-      if (xhr.status === 200) {
-        fileEntry.status = 'complete';
-        fileEntry.progress = 100;
-        Logger.append(`Upload selesai: "${fileEntry.name}" tersimpan di server.`, 'success');
-        setTimeout(fetchLibrary, 500);
-      } else {
-        fileEntry.status = 'error';
-        try {
-          const err = JSON.parse(xhr.responseText);
-          Logger.append(`Gagal upload "${fileEntry.name}": ${err.error || err.details || 'HTTP ' + xhr.status}`, 'error');
-        } catch (_) {
-          Logger.append(`Gagal upload "${fileEntry.name}": HTTP ${xhr.status}`, 'error');
+    try {
+      if (!window.vercelBlob) {
+         throw new Error("Vercel Blob client script not loaded");
+      }
+      
+      const newBlob = await window.vercelBlob.upload(fileEntry.name, fileEntry.file, {
+        access: 'public',
+        handleUploadUrl: `${window.AppConfig.BACKEND_URL}/upload`,
+        clientPayload: payload,
+        onUploadProgress: (e) => {
+           fileEntry.progress = Math.round((e.loaded / e.total) * 100);
+           updateUploadUI();
         }
-      }
-      checkAllDone();
-      updateUploadUI();
-    });
-
-    xhr.addEventListener('error', () => {
+      });
+      
+      fileEntry.status = 'complete';
+      fileEntry.progress = 100;
+      Logger.append(`Upload selesai: "${fileEntry.name}" tersimpan di Vercel Blob.`, 'success');
+      setTimeout(fetchLibrary, 500);
+    } catch (err) {
       fileEntry.status = 'error';
-      Logger.append(`Gagal upload "${fileEntry.name}": Network error`, 'error');
-      checkAllDone();
-      updateUploadUI();
-    });
-
-    xhr.open('POST', `${window.AppConfig.BACKEND_URL}/upload`);
-    xhr.setRequestHeader('Content-Type', fileEntry.file.type || 'audio/mpeg');
-    xhr.setRequestHeader('X-Filename', encodeURIComponent(fileEntry.name));
-    xhr.setRequestHeader('X-Node-Id', window.AppConfig.NODE_ID);
-    xhr.send(fileEntry.file);
+      Logger.append(`Gagal upload "${fileEntry.name}": ${err.message}`, 'error');
+    }
+    
+    checkAllDone();
+    updateUploadUI();
   }
 
   function checkAllDone() {
