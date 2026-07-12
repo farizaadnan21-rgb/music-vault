@@ -1,4 +1,4 @@
-const { put, del, head, list, getDownloadUrl } = require('@vercel/blob');
+const { put, del, head, list, getDownloadUrl, issueSignedToken, presignUrl } = require('@vercel/blob');
 
 // --- IN-MEMORY STORE ---
 const fileIndex = new Map();
@@ -175,8 +175,19 @@ app.get('/api/music/:filename', async (req, res) => {
     const { blobs } = await list();
     const b = blobs.find(x => x.pathname === req.params.filename);
     if (!b) return res.status(404).json({ error: 'Not found' });
-    const downloadUrl = await getDownloadUrl(b.url);
-    res.redirect(downloadUrl);
+    const tokenPayload = await issueSignedToken({
+      pathname: b.pathname,
+      operations: ['get'],
+      validUntil: Date.now() + 2 * 60 * 60 * 1000 // Valid for 2 hours
+    });
+    
+    const result = await presignUrl(tokenPayload, {
+      operation: 'get',
+      pathname: b.pathname,
+      access: 'private'
+    });
+
+    res.redirect(result.presignedUrl);
   } catch(e) {
     res.status(500).json({ error: e.message });
   }

@@ -243,18 +243,19 @@ const AudioPlayer = (() => {
     if (!audioElement) init();
     if (!audioElement) return;
 
+    // Extract original name for UI (remove Node-ID_)
+    const displayFilename = filename.includes('_') ? filename.split('_').slice(1).join('_') : filename;
+
     // Update track info
-    document.getElementById('track-name').textContent = filename;
-    document.getElementById('bar-track-name').textContent = filename;
+    document.getElementById('track-name').textContent = displayFilename;
+    document.getElementById('track-name').title = displayFilename;
+    document.getElementById('bar-track-name').textContent = displayFilename;
+    document.getElementById('bar-track-name').title = displayFilename;
     document.getElementById('track-source').textContent = 'Streaming...';
     document.getElementById('bar-track-node').textContent = 'Loading...';
 
-    // Set audio source — use blobUrl direct if it's a full URL, else go through API
-    if (blobUrl && blobUrl.startsWith('http')) {
-      audioElement.src = blobUrl;
-    } else {
-      audioElement.src = `${window.AppConfig.BACKEND_URL}/music/${encodeURIComponent(filename)}`;
-    }
+    // Set audio source — always route through API for private blob token signing
+    audioElement.src = `${window.AppConfig.BACKEND_URL}/music/${encodeURIComponent(filename)}`;
 
     try {
       await audioElement.play();
