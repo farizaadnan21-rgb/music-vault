@@ -82,11 +82,13 @@ app.get('/api/list_files', async (req, res) => {
       // Parse Node-ID from filename: "Node-45_song.mp3"
       const parts = b.pathname.split('_');
       const ownerId = parts.length > 1 ? parts[0] : 'Unknown';
+      const originalName = parts.length > 1 ? parts.slice(1).join('_') : b.pathname;
       // Generate a signed download URL for private blobs
       let downloadUrl = b.url;
       try { downloadUrl = await getDownloadUrl(b.url); } catch(e) {}
       return { 
         filename: b.pathname, 
+        originalName,
         ownerId, 
         size: b.size, 
         blobUrl: downloadUrl, 
@@ -110,10 +112,12 @@ app.get('/api/search', async (req, res) => {
       if (!q || b.pathname.toLowerCase().includes(q)) {
         const parts = b.pathname.split('_');
         const ownerId = parts.length > 1 ? parts[0] : 'Unknown';
+        const originalName = parts.length > 1 ? parts.slice(1).join('_') : b.pathname;
         let downloadUrl = b.url;
         try { downloadUrl = await getDownloadUrl(b.url); } catch(e) {}
         results.push({ 
           filename: b.pathname, 
+          originalName,
           ownerId, 
           size: b.size, 
           blobUrl: downloadUrl, 
@@ -206,8 +210,10 @@ app.get('/api/playlist/songs', async (req, res) => {
   
   const songs = pl.songs.map(filename => {
     const meta = blobsMap.get(filename);
-    const ownerId = filename.split('_')[0];
-    return { filename, owner: ownerId || 'Unknown', size: meta?.size || 0, blobUrl: meta?.url || null };
+    const parts = filename.split('_');
+    const ownerId = parts.length > 1 ? parts[0] : 'Unknown';
+    const originalName = parts.length > 1 ? parts.slice(1).join('_') : filename;
+    return { filename, originalName, owner: ownerId, size: meta?.size || 0, blobUrl: meta?.url || null };
   });
   res.json({ success: true, playlist: { ...pl, songs } });
 });
@@ -227,6 +233,20 @@ app.post('/api/playlist/remove_song', (req, res) => {
   if (!pl) return res.status(404).json({ error: 'Not found' });
   pl.songs = pl.songs.filter(s => s !== filename);
   res.json({ success: true, playlist: pl });
+});
+
+app.delete('/api/playlist/delete', (req, res) => {
+  const nodeId = req.headers['x-node-id'] || 'Unknown';
+  const playlistId = req.query.playlistId;
+  const pl = playlists.get(playlistId);
+  if (!pl) return res.status(404).json({ error: 'Not found' });
+  
+  if (pl.createdBy !== nodeId && pl.createdBy !== 'Unknown') {
+    return res.status(403).json({ error: 'Access denied' });
+  }
+  
+  playlists.delete(playlistId);
+  res.json({ success: true, message: `Deleted playlist ${pl.name}` });
 });
 
 module.exports = app;

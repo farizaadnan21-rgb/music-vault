@@ -182,18 +182,19 @@ const Playlist = (() => {
       `;
     } else {
       pl.songs.forEach((song, idx) => {
-        const esc = Logger.escapeHTML(song.filename);
+        const fullFile = Logger.escapeHTML(song.filename);
+        const displayName = Logger.escapeHTML(song.originalName || song.filename);
         const hasBlobUrl = song.blobUrl && song.blobUrl !== 'null';
         songsHtml += `
           <div class="playlist-song-item">
             <span class="playlist-song-num">${idx + 1}</span>
-            <span class="playlist-song-name">${esc}</span>
+            <span class="playlist-song-name">${displayName}</span>
             <div class="playlist-song-actions">
               ${hasBlobUrl ? `
-                <button class="neo-btn-play-sm" onclick="Player.play('${esc}', '${Logger.escapeHTML(song.blobUrl || '')}')">▶</button>
+                <button class="neo-btn-play-sm" onclick="Player.play('${fullFile}', '${Logger.escapeHTML(song.blobUrl || '')}')">▶</button>
               ` : '<span style="font-size:0.7rem;color:#999;">Tidak tersedia</span>'}
               ${isMine ? `
-                <button class="playlist-song-remove" onclick="Playlist.removeSong('${pl.id}', '${esc}')" title="Hapus">✕</button>
+                <button class="playlist-song-remove" onclick="Playlist.removeSong('${pl.id}', '${fullFile}')" title="Hapus dari Playlist">✕</button>
               ` : ''}
             </div>
           </div>
@@ -215,8 +216,11 @@ const Playlist = (() => {
           <button class="playlist-back-btn" onclick="Playlist.goBack()">← Kembali</button>
           <div class="playlist-detail-title">
             <strong>${Logger.escapeHTML(pl.name)}</strong>
-            <span class="playlist-detail-owner">oleh ${Logger.escapeHTML(pl.createdBy)}${isMine ? ' (Anda)' : ''} • ${pl.songs.length} lagu</span>
+            <span class="playlist-detail-owner">oleh ${Logger.escapeHTML(pl.createdBy)}${isMine ? ' <span class="badge" style="background:#FFD700;color:#000;">✨ YOU</span>' : ''} • ${pl.songs.length} lagu</span>
           </div>
+          ${isMine ? `
+            <button class="neo-btn neo-btn-danger neo-btn-sm" style="margin-left:auto;" onclick="Playlist.deletePlaylist('${pl.id}')">🗑️ Hapus Playlist</button>
+          ` : ''}
         </div>
         ${addSongHtml}
         <div class="playlist-songs-list" id="playlist-songs-list-container">
@@ -241,7 +245,7 @@ const Playlist = (() => {
         const data = await res.json();
         const datalist = document.getElementById('available-songs-list');
         if (datalist && data.files) {
-          datalist.innerHTML = data.files.map(f => `<option value="${Logger.escapeHTML(f.filename)}">`).join('');
+          datalist.innerHTML = data.files.map(f => `<option value="${Logger.escapeHTML(f.filename)}">${Logger.escapeHTML(f.originalName || f.filename)}</option>`).join('');
         }
       }
     } catch (e) {
@@ -299,6 +303,28 @@ const Playlist = (() => {
     }
   }
 
+  async function deletePlaylist(playlistId) {
+    if (!confirm('Apakah Anda yakin ingin menghapus playlist ini selamanya?')) return;
+    
+    try {
+      const res = await fetch(`${window.AppConfig.BACKEND_URL}/playlist/delete?playlistId=${playlistId}`, {
+        method: 'DELETE',
+        headers: {
+          'X-Node-Id': window.AppConfig.NODE_ID
+        }
+      });
+
+      if (res.ok) {
+        Logger.append(`Playlist berhasil dihapus.`, 'warning');
+        goBack();
+      } else {
+        Logger.append('Gagal menghapus playlist.', 'error');
+      }
+    } catch (e) {
+      Logger.append(`Error: ${e.message}`, 'error');
+    }
+  }
+
   // ==================== GO BACK ====================
 
   function goBack() {
@@ -318,5 +344,5 @@ const Playlist = (() => {
     fetchPlaylists();
   }
 
-  return { init, openPlaylist, addSong, removeSong, goBack };
+  return { init, openPlaylist, addSong, removeSong, deletePlaylist, goBack };
 })();

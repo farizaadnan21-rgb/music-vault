@@ -111,13 +111,14 @@ const Upload = (() => {
         const dateStr = d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
 
         const escapedName = Logger.escapeHTML(f.filename);
-        const isOwner = f.owner === window.AppConfig.NODE_ID;
+        const displayName = Logger.escapeHTML(f.originalName || f.filename);
+        const isOwner = f.ownerId === window.AppConfig.NODE_ID;
 
         html += `
           <div class="library-item">
             <div class="library-item-icon">🎵</div>
             <div class="library-item-info">
-              <div class="library-item-name" title="${escapedName}">${escapedName}</div>
+              <div class="library-item-name" title="${escapedName}">${displayName}</div>
               <div class="library-item-meta">
                 <span>${sizeStr}</span>
                 <span>•</span>
