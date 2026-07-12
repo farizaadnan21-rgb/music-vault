@@ -1,73 +1,82 @@
 # 🎵 Music Vault (MusShare)
 
-Music Vault adalah aplikasi **Decentralized Music Sharing & Streaming** berbasis arsitektur *Client-Server (Master-Slave)* yang mengusung antarmuka bergaya modern *Neumorphism/Glassmorphism*. Project ini mensimulasikan lingkungan ekosistem **Peer-to-Peer (P2P)** di mana setiap *node* (pengguna) dapat saling membagikan, mencari, dan melakukan *streaming* file audio secara langsung tanpa perlu proses instalasi database yang rumit.
+Music Vault adalah aplikasi **Decentralized Music Sharing & Streaming** yang mengusung antarmuka bergaya modern *Neumorphism/Glassmorphism*. Project ini mensimulasikan lingkungan ekosistem **Peer-to-Peer (P2P)** di mana setiap *node* (pengguna) dapat saling membagikan, mencari, dan melakukan *streaming* file audio secara langsung.
+
+Aplikasi ini telah dimodernisasi dan di-*deploy* sepenuhnya menggunakan infrastruktur *Serverless* Vercel, menjamin performa tinggi, skalabilitas, dan aksesibilitas global tanpa batasan perangkat keras lokal.
 
 ## ✨ Fitur Utama
 
-- **No-Login Ownership System:** Identitas pengguna dikelola menggunakan `Node-ID` unik yang dibuat secara otomatis melalui `localStorage` di browser, sehingga tidak memerlukan database relasional untuk sistem *login*.
-- **Live Audio Streaming:** Mendukung *HTTP 206 Partial Content*. Pengguna dapat melompati (seek/skip) menit ke berapapun dalam lagu tanpa harus mengunduh file secara utuh (anti-buffering).
-- **Audio Visualizer:** Animasi grafik frekuensi suara *real-time* yang digambar langsung di atas elemen `<canvas>` menggunakan Web Audio API.
-- **Secure File Deletion:** File musik Anda tidak bisa dihapus oleh orang lain. Java Server akan memverifikasi kepemilikan file dengan mencocokkan *Header X-Node-Id* pengirim dengan isi file metadata `.owner` yang tersimpan di server.
-- **Network Telemetry:** Statistik lalu lintas secara *real-time* yang menampilkan latensi (*ping*), total peer yang aktif, dan total lagu unik yang tersedia di jaringan secara keseluruhan.
+- **No-Login Ownership System:** Identitas pengguna dikelola menggunakan `Node-ID` unik yang dibuat secara otomatis melalui `localStorage` di browser. Tidak ada sistem registrasi dan database relasional yang rumit, memberikan anonimitas dan kemudahan akses.
+- **Secure Serverless Storage:** Menggunakan integrasi modern `@vercel/blob` untuk penyimpanan file audio secara aman (Private Blob). File musik Anda hanya bisa diputar melalui URL *presigned* yang terenkripsi dan sementara, mencegah pencurian *bandwidth* atau unduhan ilegal.
+- **Live Audio Streaming:** Mendukung *HTTP 206 Partial Content* melalui Vercel Blob *streaming*. Pengguna dapat melompati (seek/skip) menit ke berapapun dalam lagu tanpa harus mengunduh file secara utuh (anti-buffering).
+- **Audio Visualizer:** Animasi grafik frekuensi suara *real-time* yang digambar secara mulus di atas elemen `<canvas>` menggunakan Web Audio API murni.
+- **Secure File Deletion:** File musik Anda tidak bisa dihapus oleh pengguna lain. API Serverless memverifikasi kepemilikan file dengan mencocokkan *Header X-Node-Id* pengirim dengan *prefix* kepemilikan yang tersimpan di sistem penyimpanan awan.
+- **Network Telemetry:** Statistik lalu lintas secara *real-time* yang menampilkan latensi (*ping*) jaringan, total *peer* yang sedang aktif secara global, dan total lagu unik yang tersedia di ekosistem keseluruhan.
 
-## 💻 Tech Stack
-Project ini dibangun khusus dengan teknologi fundamental yang sangat ringan:
-- **Frontend:** Vanilla HTML5, CSS3 (Flexbox/Grid), dan murni Vanilla JavaScript (Tanpa Framework seperti React/Vue).
-- **Backend:** Murni Java Standard Edition menggunakan `com.sun.net.httpserver.HttpServer` (Tanpa Spring Boot atau framework tambahan).
-- **Database:** *In-Memory Indexing* menggunakan `ConcurrentHashMap` dan sistem penyimpanan *File-based* untuk performa maksimal.
+## 💻 Tech Stack (Modern Serverless Architecture)
 
----
-
-## 🚀 Cara Menjalankan Project Secara Lokal
-
-Untuk menjalankan project ini, Anda harus menjalankan Backend (Server Java) dan Frontend (Web Server) secara terpisah.
-
-### 1. Menjalankan Backend (Server Java)
-Server Java berfungsi sebagai jantung aplikasi yang bertugas menyimpan file mp3, menyimpan indeks, serta melayani lalu lintas streaming. Pastikan [Java JDK](https://www.oracle.com/java/technologies/downloads/) sudah terinstal di komputer Anda.
-
-1. Buka Terminal / Command Prompt.
-2. Masuk ke direktori project ini.
-3. Lakukan kompilasi dan jalankan servernya:
-   ```bash
-   javac IndexingServer.java
-   java IndexingServer
-   ```
-4. Server Java akan berjalan di port `8081`. 
-
-### 2. Menjalankan Frontend (Tampilan Web)
-1. Buka Terminal / Command Prompt baru (biarkan terminal Java tetap menyala).
-2. Masuk ke direktori project ini.
-3. Jalankan server HTTP lokal (disarankan menggunakan Python):
-   ```bash
-   python3 -m http.server 8001
-   ```
-4. Buka browser Anda dan akses: 👉 **http://localhost:8001**
+Project ini dirancang untuk menunjukkan keahlian integrasi Vanilla Frontend murni dengan modern Backend *Serverless* yang efisien:
+- **Frontend:** Vanilla HTML5, CSS3 (Flexbox/Grid dengan pola UI *Neumorphism* & *Glassmorphism*), dan Vanilla JavaScript murni. Bebas dari *bloatware* dan framework raksasa, membuktikan penguasaan fundamental web sejati (DOM Manipulation, Web Audio API, Web Storage, Event Delegation).
+- **Backend (Serverless):** Node.js menggunakan *framework* ringan **Express.js** yang dieksekusi sebagai fungsi *Serverless* di platform **Vercel** (`api/index.js`).
+- **Database / File Storage:** Mengandalkan arsitektur penyimpanan modern **Vercel Blob** untuk manajemen file statis dan biner tanpa batas, menggantikan metode *in-memory* dan *file-system* lokal usang.
+- **State Management:** Memanfaatkan *In-Memory Maps* tingkat *instance* pada fungsi serverless yang dikombinasikan dengan pembacaan metadata *Vercel Blob* berkecepatan tinggi untuk pencarian file instan.
 
 ---
 
 ## 📂 Struktur Direktori
 
 ```text
-musshare/
-├── IndexingServer.java    # Kode sumber (Source Code) utama untuk Server Java
+music-vault/
+├── api/
+│   └── index.js           # Serverless Node.js Backend API (Express.js) - Endpoint routing, auth, & Vercel Blob SDK operations
 ├── index.html             # Halaman antarmuka utama (UI)
 ├── css/
-│   ├── core.css           # Styling dasar & variabel warna
-│   ├── ui.css             # Desain komponen Neumorphism/Glassmorphism
-│   └── upload.css         # Styling khusus halaman library dan animasi upload
+│   ├── core.css           # Styling dasar, layouting, & variabel warna utama
+│   ├── ui.css             # Logika desain komponen Neumorphism/Glassmorphism tingkat lanjut
+│   └── upload.css         # Styling spesifik halaman library, visualizer, animasi status upload, & micro-interactions
 ├── js/
-│   ├── core.js            # Logika P2P Node, Network Stats, dan Visualizer
-│   ├── search.js          # Mesin pencari dan relasi node indexing
-│   ├── upload.js          # Logika upload multipart, file library, & fitur hapus
-│   └── playlist.js        # Modul penyusunan koleksi lagu
-├── uploads/               # Direktori fisik tempat lagu (.mp3) dan metadata kepemilikan (.owner) disimpan
-└── playlists.dat          # Basis data file-based untuk menyimpan struktur playlist
+│   ├── core.js            # Inisialisasi P2P Node, Network Stats, logika Web Audio API (Visualizer), & Heartbeat system
+│   ├── search.js          # Mesin pencari dinamis dan sistem relasi antar node
+│   ├── upload.js          # Sistem antrean upload sequential, File Reader, limitasi file, & fitur hapus aman
+│   └── playlist.js        # Modul manajemen struktur data playlist berbasis klien
+├── package.json           # Dependensi aplikasi Node.js (Express, Vercel Blob SDK)
+└── vercel.json            # Konfigurasi routing serverless deployment & rule headers
 ```
 
-## ⚠️ Catatan Penting Terkait Vercel / Cloud Deployment
-Project ini dirancang dengan interaksi langsung terhadap Java Raw Socket. **Anda tidak dapat mengeksekusi (deploy) `IndexingServer.java` di Vercel**, karena Vercel hanya mendukung fungsi serverless dan hosting *Static Sites*.
+## 🚀 Instalasi & Menjalankan Secara Lokal
 
-Jika Anda mengunggah frontend project ini ke Vercel:
-Aplikasi web (GUI) akan muncul dengan baik, namun akan mengalami `Disconnected / Failed to Fetch`. Ini terjadi karena web yang sudah ter-deploy di Vercel secara otomatis mencari backend di alamat HTTPS, sedangkan backend Java Anda masih terkunci di `http://localhost:8081` lokal laptop Anda.
+Meskipun aplikasi ini menggunakan infrastruktur Vercel, Anda tetap bisa menjalankannya di komputer lokal Anda untuk pengembangan (*development*).
 
-**Solusinya:** Gunakan *Tunneling Software* seperti **Ngrok** untuk mengekspos port 8081 Anda ke publik menjadi URL HTTPS, lalu ganti kode `BACKEND_URL` di dalam `js/core.js` dengan URL dari Ngrok tersebut. Atau gunakan layanan hosting VM/VPS konvensional untuk Server Java Anda.
+**Prasyarat:**
+1. [Node.js](https://nodejs.org/) terinstal di komputer.
+2. Akun Vercel dan [Vercel CLI](https://vercel.com/docs/cli) terinstal (`npm i -g vercel`).
+3. Project Vercel Blob sudah dikonfigurasi di *dashboard* Vercel Anda untuk mendapatkan token.
+
+**Langkah-langkah:**
+
+1. Klon (*clone*) repositori ini dan masuk ke foldernya:
+   ```bash
+   git clone <url-repo-anda>
+   cd music-vault
+   ```
+2. Instal semua dependensi Node.js:
+   ```bash
+   npm install
+   ```
+3. Hubungkan ke project Vercel Anda dan tarik *Environment Variables* (Token Vercel Blob):
+   ```bash
+   vercel link
+   vercel env pull .env.local
+   ```
+4. Jalankan server pengembangan (*Development Server*) Vercel secara lokal:
+   ```bash
+   vercel dev
+   ```
+5. Buka browser Anda dan akses aplikasi di URL yang disediakan oleh terminal (biasanya `http://localhost:3000`). Semua routing API (`/api/...`) dan halaman frontend akan ditangani secara otomatis oleh Vercel CLI selayaknya berjalan di *production*.
+
+## 📌 Status Project & Deployment
+
+Aplikasi ini sepenuhnya siap tayang di lingkungan **Production** (Telah dicoba dengan stabil) melalui integrasi otomatis CI/CD Vercel. 
+
+Silakan coba versi Live-nya secara langsung: 
+👉 **[Kunjungi Demo Aplikasi Music Vault](https://music-vault-sigma.vercel.app/)**

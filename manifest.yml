@@ -1,4 +1,0 @@
-applications:
-- name: music-vault
-  memory: 512M
-  instances: 1
